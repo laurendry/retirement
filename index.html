@@ -233,6 +233,19 @@
 
   .field select{ font-family: var(--sans); font-size:.9rem; }
 
+  .dparts{ display:flex; align-items:center; gap:.4rem; }
+
+  .field .dp{
+    width:auto; text-align:center;
+    padding:.6rem .4rem;
+    /* 1rem keeps iOS from zooming the page when a field takes focus */
+    font-size:1rem;
+  }
+  .field .dp-m, .field .dp-d{ width:3.3rem; }
+  .field .dp-y{ width:5rem; }
+
+  .dsep{ font-family: var(--mono); color: var(--dim); }
+
   .field input:focus-visible, .field select:focus-visible,
   .adjust:focus-visible, .linkbtn:focus-visible, .src a:focus-visible{
     outline:2px solid var(--brass); outline-offset:2px;
@@ -343,20 +356,32 @@
     <h2>Retirement</h2>
 
     <div class="field">
-      <label for="dob">Date of birth</label>
-      <input type="date" id="dob">
+      <label for="dobM">Date of birth</label>
+      <div class="dparts" role="group" aria-label="Date of birth">
+        <input class="dp dp-m" id="dobM" type="text" inputmode="numeric" autocomplete="off" maxlength="2" placeholder="MM" aria-label="Month">
+        <span class="dsep" aria-hidden="true">/</span>
+        <input class="dp dp-d" id="dobD" type="text" inputmode="numeric" autocomplete="off" maxlength="2" placeholder="DD" aria-label="Day">
+        <span class="dsep" aria-hidden="true">/</span>
+        <input class="dp dp-y" id="dobY" type="text" inputmode="numeric" autocomplete="off" maxlength="4" placeholder="YYYY" aria-label="Year">
+      </div>
     </div>
 
     <div class="field">
       <label for="age">Retire at age</label>
       <input type="number" id="age" min="30" max="110" step="1" inputmode="numeric">
+      <p class="hint">67 is full Social Security retirement age for anyone born 1960 or later.</p>
     </div>
 
     <div class="field">
-      <label for="exact">Or an exact date</label>
-      <input type="date" id="exact">
+      <label for="exM">Or an exact date</label>
+      <div class="dparts" role="group" aria-label="Exact retirement date">
+        <input class="dp dp-m" id="exM" type="text" inputmode="numeric" autocomplete="off" maxlength="2" placeholder="MM" aria-label="Month">
+        <span class="dsep" aria-hidden="true">/</span>
+        <input class="dp dp-d" id="exD" type="text" inputmode="numeric" autocomplete="off" maxlength="2" placeholder="DD" aria-label="Day">
+        <span class="dsep" aria-hidden="true">/</span>
+        <input class="dp dp-y" id="exY" type="text" inputmode="numeric" autocomplete="off" maxlength="4" placeholder="YYYY" aria-label="Year">
+      </div>
       <p class="hint">Set this to override the age above. <button class="linkbtn" id="clearExact" type="button">Clear</button></p>
-      <p class="hint" style="margin-top:.5rem">67 is full Social Security retirement age for anyone born 1960 or later.</p>
     </div>
 
     <h2>Life expectancy</h2>
@@ -640,7 +665,7 @@
   ["quote","attrib","eyebrow","targetLine","fY","fM","fD","fH","fI","fS","tDays","tWeek",
    "pctNum","pctSub","lifeNote","track","prog","knob",
    "setupIntro","countdown","lifeSec",
-   "dob","age","exact","table","adj","panel","adjustBtn","clearExact"].forEach(function(id){
+   "dobM","dobD","dobY","exM","exD","exY","age","table","adj","panel","adjustBtn","clearExact"].forEach(function(id){
     el[id] = document.getElementById(id);
   });
 
@@ -782,17 +807,69 @@
      Panel
      ========================================================= */
 
-  el.dob.value   = settings.dob;
+  function pad2(v){ v = String(v); return v.length === 1 ? "0" + v : v; }
+
+  var dobG = { m: el.dobM, d: el.dobD, y: el.dobY };
+  var exG  = { m: el.exM,  d: el.exD,  y: el.exY  };
+
+  function partsToISO(g){
+    var m = g.m.value.trim(), d = g.d.value.trim(), y = g.y.value.trim();
+    if(!/^\d{1,2}$/.test(m) || !/^\d{1,2}$/.test(d) || !/^\d{4}$/.test(y)) return "";
+    if(+y < 1900 || +y > 2200) return "";
+    var iso = y + "-" + pad2(m) + "-" + pad2(d);
+    return parseISO(iso) ? iso : "";   // rejects 02/30, 04/31 and friends
+  }
+
+  function fillParts(g, iso){
+    var p = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || "");
+    g.m.value = p ? p[2] : "";
+    g.d.value = p ? p[3] : "";
+    g.y.value = p ? p[1] : "";
+  }
+
+  function wireDateGroup(g, changed){
+    var order = [g.m, g.d, g.y];
+    order.forEach(function(input, i){
+      var cap = (input === g.y) ? 4 : 2;
+
+      input.addEventListener("input", function(){
+        var v = input.value.replace(/\D/g, "").slice(0, cap);
+        if(v !== input.value) input.value = v;
+
+        // jump to the next box once this one can't take another digit:
+        // full, or a first digit that rules out a two-digit value
+        var settled = v.length === cap ||
+                      (v.length === 1 && (input === g.m ? +v > 1 : input === g.d ? +v > 3 : false));
+        if(settled && order[i+1]) order[i+1].focus();
+
+        changed();
+      });
+
+      input.addEventListener("blur", function(){
+        if(input !== g.y && input.value.length === 1) input.value = pad2(input.value);
+        changed();
+      });
+
+      input.addEventListener("keydown", function(e){
+        if(e.key === "Backspace" && input.value === "" && order[i-1]){
+          order[i-1].focus();
+          e.preventDefault();
+        }
+      });
+    });
+  }
+
+  fillParts(dobG, settings.dob);
+  fillParts(exG, settings.exact);
   el.age.value   = settings.age;
-  el.exact.value = settings.exact;
   el.table.value = settings.table;
   el.adj.value   = settings.adj;
 
   function onChange(){
     settings = {
-      dob: el.dob.value,
+      dob: partsToISO(dobG),
       age: el.age.value === "" ? DEFAULTS.age : el.age.value,
-      exact: el.exact.value,
+      exact: partsToISO(exG),
       table: el.table.value,
       adj: el.adj.value === "" ? 0 : el.adj.value
     };
@@ -802,13 +879,16 @@
     render();
   }
 
-  ["dob","age","exact","table","adj"].forEach(function(id){
+  wireDateGroup(dobG, onChange);
+  wireDateGroup(exG, onChange);
+
+  ["age","table","adj"].forEach(function(id){
     el[id].addEventListener("change", onChange);
     el[id].addEventListener("input", onChange);
   });
 
   el.clearExact.addEventListener("click", function(){
-    el.exact.value = "";
+    exG.m.value = exG.d.value = exG.y.value = "";
     onChange();
   });
 
