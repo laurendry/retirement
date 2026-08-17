@@ -1,7 +1,7 @@
 /* Retirement — offline shell.
    Bump CACHE when you upload a new index.html; the old cache is dropped on activate. */
 
-var CACHE = "retirement-v3";
+var CACHE = "retirement-v5";
 
 var SHELL = [
   "./",
