@@ -90,6 +90,54 @@
     color: var(--muted);
   }
 
+  /* ---------- section headers ---------- */
+
+  .section-head{
+    display:flex; align-items:center; gap:.9rem;
+    margin:0 0 1.4rem;
+  }
+
+  .section-head h2{
+    margin:0; white-space:nowrap; font-weight:400;
+    font-size:.72rem; letter-spacing:.26em; text-transform:uppercase;
+    color: var(--brass);
+  }
+
+  .section-head::after{
+    content:""; flex:1 1 auto; height:1px; background: var(--rule-soft);
+  }
+
+  /* ---------- assumptions ---------- */
+
+  .notes{
+    margin:1.6rem 0 0; padding-top:.95rem;
+    border-top:1px solid var(--rule-soft);
+    text-align:left;
+  }
+
+  .notes-title{
+    margin:0 0 .35rem;
+    font-size:.58rem; letter-spacing:.22em; text-transform:uppercase; color: var(--dim);
+  }
+
+  .nrow{
+    display:flex; align-items:baseline; justify-content:space-between; gap:1.2rem;
+    padding:.34rem 0;
+    font-size:.7rem; line-height:1.4;
+  }
+
+  .nrow span{ color: var(--dim); }
+
+  .nrow b{
+    font-weight:400; text-align:right; color: var(--muted);
+    font-family: var(--mono); font-variant-numeric: tabular-nums;
+  }
+
+  .caveat{
+    margin:.9rem 0 0;
+    font-size:.68rem; line-height:1.6; color: var(--dim); text-align:left;
+  }
+
   /* ---------- retirement countdown ---------- */
 
   .target{
@@ -98,6 +146,8 @@
     font-size: clamp(1.3rem, 6vw, 1.62rem);
     line-height:1.25;
   }
+
+  #cdLabel{ margin-top:1.7rem; }
 
   .ledger{ list-style:none; margin:0; padding:0; border-top:1px solid var(--rule-soft); }
 
@@ -300,8 +350,12 @@
 
   <!-- retirement countdown -->
   <section class="rise rise-2" id="countdown" aria-label="Retirement countdown">
-    <p class="eyebrow" id="eyebrow">Time remaining</p>
+    <div class="section-head"><h2>Retirement</h2></div>
+
+    <p class="eyebrow" id="eyebrow">Projected date</p>
     <h1 class="target" id="targetLine">&nbsp;</h1>
+
+    <p class="eyebrow" id="cdLabel">Time remaining</p>
 
     <ol class="ledger">
       <li><span class="unit">Years</span><span class="fig" id="fY">0</span></li>
@@ -320,11 +374,18 @@
     </div>
 
     <p class="totals"><b id="tDays">0</b> days &nbsp;·&nbsp; <b id="tWeek">0</b> weekdays</p>
+
+    <div class="notes">
+      <p class="notes-title">Assumptions</p>
+      <div class="nrow"><span>Date of birth</span><b id="asmBorn">&mdash;</b></div>
+      <div class="nrow"><span>Retiring at</span><b id="asmAt">&mdash;</b></div>
+      <div class="nrow"><span>Weekday count</span><b>Mon&ndash;Fri, no holidays</b></div>
+    </div>
   </section>
 
   <!-- life gauge -->
-  <section class="life rise rise-3" id="lifeSec" aria-label="Life so far">
-    <p class="eyebrow">Life so far</p>
+  <section class="life rise rise-3" id="lifeSec" aria-label="Life completed">
+    <div class="section-head"><h2>Life completed</h2></div>
 
     <div class="gauge">
       <svg viewBox="0 0 260 190" role="img" aria-labelledby="gaugeLabel">
@@ -347,7 +408,15 @@
       </div>
     </div>
 
-    <p class="life-note" id="lifeNote">&nbsp;</p>
+    <div class="notes">
+      <p class="notes-title">Assumptions</p>
+      <div class="nrow"><span>Current age</span><b id="asmAge">&mdash;</b></div>
+      <div class="nrow"><span>Reference group</span><b id="asmPop">&mdash;</b></div>
+      <div class="nrow"><span>Years remaining at this age</span><b id="asmRem">&mdash;</b></div>
+      <div class="nrow"><span>Manual adjustment</span><b id="asmAdj">&mdash;</b></div>
+      <div class="nrow"><span>Source</span><b>NCHS life tables, 2023</b></div>
+      <p class="caveat" id="lifeNote">&nbsp;</p>
+    </div>
   </section>
 
   <button class="adjust rise rise-4" id="adjustBtn" aria-expanded="false" aria-controls="panel">Adjust</button>
@@ -407,7 +476,7 @@
     </p>
 
     <p class="hint" style="margin-top:.9rem">Everything here stays on this device.</p>
-    <p class="hint" style="margin-top:.55rem; color:var(--rule)">Version 5</p>
+    <p class="hint" style="margin-top:.55rem; color:var(--rule)">Version 6</p>
   </section>
 
   <p class="note">Runs entirely on this device.</p>
@@ -665,7 +734,8 @@
   var el = {};
   ["quote","attrib","eyebrow","targetLine","fY","fM","fD","fH","fI","fS","tDays","tWeek",
    "pctNum","pctSub","lifeNote","track","prog","knob",
-   "setupIntro","countdown","lifeSec",
+   "setupIntro","countdown","lifeSec","cdLabel",
+   "asmBorn","asmAt","asmAge","asmPop","asmRem","asmAdj",
    "dobM","dobD","dobY","exM","exD","exY","age","table","adj","panel","adjustBtn","clearExact"].forEach(function(id){
     el[id] = document.getElementById(id);
   });
@@ -685,6 +755,12 @@
   }
 
   function pad(n){ return n < 10 ? "0"+n : String(n); }
+
+  function shortDate(d){
+    try{
+      return d.toLocaleDateString(undefined, { year:"numeric", month:"short", day:"numeric" });
+    }catch(e){ return d.toDateString(); }
+  }
 
   function longDate(d){
     try{
@@ -732,13 +808,18 @@
     var frac = Math.max(0, Math.min(1, age / projected));
     var pct = frac * 100;
 
+    var rem = remainingYears(settings.table, age);
+
     var pctStr = pct.toFixed(1);
     put(el.pctNum, "pctv", pctStr);
     put(el.pctSub, "psub", "of an expected " + projected.toFixed(1) + " years");
+
+    put(el.asmAge, "aage", Math.floor(age) + " years");
+    put(el.asmPop, "apop", TABLES[settings.table].label);
+    put(el.asmRem, "arem", rem.toFixed(1) + " years");
+    put(el.asmAdj, "aadj", adj === 0 ? "None" : (adj > 0 ? "+" : "\u2212") + Math.abs(adj).toFixed(1) + " years");
     put(el.lifeNote, "lnote",
-      "You are " + Math.floor(age) + ". " + TABLES[settings.table].label +
-      " who reach this age live a further " + remainingYears(settings.table, age).toFixed(1) +
-      " years on average \u2014 a population figure, not a forecast for any one person.");
+      "The life table gives years remaining for people who have already reached your age, which is why the total exceeds the life-expectancy-at-birth figure. It describes a population, not any one person.");
 
     // one tenth of a percent is about a month, so this settles instead of chasing
     if(pctStr !== lastPctStr){
@@ -779,14 +860,22 @@
       return;
     }
 
+    var dobD = parseISO(settings.dob);
+    put(el.asmBorn, "aborn", dobD ? shortDate(dobD) : "\u2014");
+    put(el.asmAt, "aat", parseISO(settings.exact)
+        ? "a fixed date"
+        : "age " + parseInt(settings.age, 10));
+
     if(target <= now){
-      el.eyebrow.textContent = "Retired";
-      put(el.targetLine, "t", "since " + longDate(target));
+      el.eyebrow.textContent = "Retired since";
+      el.cdLabel.textContent = "Time since";
+      put(el.targetLine, "t", longDate(target));
       put(el.fY,"y","0"); put(el.fM,"m","0"); put(el.fD,"d","0");
       put(el.fH,"h","00"); put(el.fI,"i","00"); put(el.fS,"s","00");
       put(el.tDays,"td","0"); put(el.tWeek,"tw","0");
     } else {
-      el.eyebrow.textContent = "Time remaining";
+      el.eyebrow.textContent = "Projected date";
+      el.cdLabel.textContent = "Time remaining";
       put(el.targetLine, "t", longDate(target));
 
       var b = breakdown(now, target);
